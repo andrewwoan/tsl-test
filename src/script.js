@@ -1,0 +1,110 @@
+import GUI from "lil-gui";
+import * as THREE from "three/webgpu";
+import {
+  sin,
+  positionLocal,
+  time,
+  vec2,
+  vec3,
+  vec4,
+  uv,
+  uniform,
+  color,
+  fog,
+  rangeFogFactor,
+  pass,
+  renderOutput,
+} from "three/tsl";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { sobel } from "three/addons/tsl/display/SobelOperatorNode.js";
+
+const gui = new GUI({
+  width: 400,
+});
+
+const canvas = document.querySelector("canvas.webgl");
+
+const scene = new THREE.Scene();
+const fogColor = uniform(color("#ffffff"));
+scene.fogNode = fog(fogColor, rangeFogFactor(10, 15));
+
+const sizes = {
+  width: window.innerWidth,
+  height: window.innerHeight,
+};
+
+window.addEventListener("resize", () => {
+  sizes.width = window.innerWidth;
+  sizes.height = window.innerHeight;
+
+  camera.aspect = sizes.width / sizes.height;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(sizes.width, sizes.height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
+
+const camera = new THREE.PerspectiveCamera(
+  25,
+  sizes.width / sizes.height,
+  0.1,
+  100,
+);
+camera.position.x = 6;
+camera.position.y = 3;
+camera.position.z = 10;
+scene.add(camera);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+const renderer = new THREE.WebGPURenderer({
+  canvas: canvas,
+  forceWebGL: false,
+});
+renderer.setSize(sizes.width, sizes.height);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(fogColor.value);
+
+const postProcessing = new THREE.PostProcessing(renderer);
+postProcessing.outputColorTransform = false;
+
+const scenePass = pass(scene, camera);
+const outputPass = renderOutput(scenePass);
+
+postProcessing.outputNode = sobel(outputPass);
+// postProcessing.outputNode = outputPass
+
+const material = new THREE.MeshBasicNodeMaterial();
+
+const timeFrequency = uniform(0.5);
+const positionFrequency = uniform(2);
+const intensityFrequency = uniform(0.5);
+
+const oscillation = sin(
+  time.mul(timeFrequency).add(positionLocal.y.mul(positionFrequency)),
+).mul(intensityFrequency);
+material.positionNode = vec3(
+  positionLocal.x.add(oscillation),
+  positionLocal.y,
+  positionLocal.z,
+);
+
+material.colorNode = vec4(uv().mul(vec2(32, 8)).fract(), 1, 1);
+
+const torusKnot = new THREE.Mesh(
+  new THREE.TorusKnotGeometry(1, 0.35, 128, 32),
+  material,
+);
+scene.add(torusKnot);
+
+gui.add(timeFrequency, "value").min(0).max(5).name("timeFrequency");
+gui.add(positionFrequency, "value").min(0).max(5).name("positionFrequency");
+gui.add(intensityFrequency, "value").min(0).max(5).name("intensityFrequency");
+
+const tick = () => {
+  controls.update();
+
+  postProcessing.renderAsync(scene, camera);
+};
+renderer.setAnimationLoop(tick);
