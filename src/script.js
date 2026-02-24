@@ -22,11 +22,11 @@ const gui = new GUI({
   width: 400,
 });
 
-const canvas = document.querySelector("canvas.webgl");
+const canvas = document.querySelector("canvas.webgpu");
 
 const scene = new THREE.Scene();
 const fogColor = uniform(color("#ffffff"));
-scene.fogNode = fog(fogColor, rangeFogFactor(10, 15));
+// scene.fogNode = fog(fogColor, rangeFogFactor(10, 15));
 
 const sizes = {
   width: window.innerWidth,
@@ -66,45 +66,68 @@ renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(fogColor.value);
 
-const postProcessing = new THREE.PostProcessing(renderer);
-postProcessing.outputColorTransform = false;
+const renderPipeline = new THREE.RenderPipeline(renderer);
+renderPipeline.outputColorTransform = false;
 
 const scenePass = pass(scene, camera);
 const outputPass = renderOutput(scenePass);
 
-postProcessing.outputNode = sobel(outputPass);
-// postProcessing.outputNode = outputPass
+renderPipeline.outputNode = sobel(outputPass);
 
 const material = new THREE.MeshBasicNodeMaterial();
+material.side = THREE.DoubleSide;
 
 const timeFrequency = uniform(0.5);
 const positionFrequency = uniform(2);
 const intensityFrequency = uniform(0.5);
 
-const oscillation = sin(
-  time.mul(timeFrequency).add(positionLocal.y.mul(positionFrequency)),
-).mul(intensityFrequency);
-material.positionNode = vec3(
-  positionLocal.x.add(oscillation),
-  positionLocal.y,
-  positionLocal.z,
-);
+material.positionNode = vec3(positionLocal.x, positionLocal.y, positionLocal.z);
 
-material.colorNode = vec4(uv().mul(vec2(32, 8)).fract(), 1, 1);
+material.colorNode = vec4(0, 0, 0, 1);
 
-const torusKnot = new THREE.Mesh(
-  new THREE.TorusKnotGeometry(1, 0.35, 128, 32),
+// Plane geometry with configurable dimensions
+const planeParams = {
+  width: 4,
+  height: 4,
+};
+
+let plane = new THREE.Mesh(
+  new THREE.PlaneGeometry(planeParams.width, planeParams.height, 64, 64),
   material,
 );
-scene.add(torusKnot);
+scene.add(plane);
+
+const rebuildPlane = () => {
+  plane.geometry.dispose();
+  plane.geometry = new THREE.PlaneGeometry(
+    planeParams.width,
+    planeParams.height,
+    64,
+    64,
+  );
+};
 
 gui.add(timeFrequency, "value").min(0).max(5).name("timeFrequency");
 gui.add(positionFrequency, "value").min(0).max(5).name("positionFrequency");
 gui.add(intensityFrequency, "value").min(0).max(5).name("intensityFrequency");
 
+const planeFolder = gui.addFolder("Plane");
+planeFolder
+  .add(planeParams, "width")
+  .min(0.5)
+  .max(20)
+  .name("width")
+  .onChange(rebuildPlane);
+planeFolder
+  .add(planeParams, "height")
+  .min(0.5)
+  .max(20)
+  .name("height")
+  .onChange(rebuildPlane);
+
 const tick = () => {
   controls.update();
 
-  postProcessing.renderAsync(scene, camera);
+  renderPipeline.render();
 };
 renderer.setAnimationLoop(tick);
