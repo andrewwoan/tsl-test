@@ -13,10 +13,14 @@ import {
   fog,
   rangeFogFactor,
   pass,
+  sub,
   renderOutput,
+  mix,
 } from "three/tsl";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { sobel } from "three/addons/tsl/display/SobelOperatorNode.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 
 const gui = new GUI({
   width: 400,
@@ -66,13 +70,19 @@ renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setClearColor(fogColor.value);
 
+const light = new THREE.DirectionalLight();
+const lightAmbient = new THREE.AmbientLight();
+scene.add(light);
+scene.add(lightAmbient);
+
 const renderPipeline = new THREE.RenderPipeline(renderer);
 renderPipeline.outputColorTransform = false;
 
 const scenePass = pass(scene, camera);
 const outputPass = renderOutput(scenePass);
 
-renderPipeline.outputNode = sobel(outputPass);
+const sobelEdges = sobel(outputPass);
+renderPipeline.outputNode = mix(outputPass, vec4(0, 0, 0, 1), sobelEdges);
 
 const material = new THREE.MeshBasicNodeMaterial();
 material.side = THREE.DoubleSide;
@@ -85,6 +95,16 @@ material.positionNode = vec3(positionLocal.x, positionLocal.y, positionLocal.z);
 
 material.colorNode = vec4(0, 0, 0, 1);
 
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("/draco/");
+
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
+
+gltfLoader.load("/models/Test_Room.glb", (gltf) => {
+  scene.add(gltf.scene);
+});
+
 // Plane geometry with configurable dimensions
 const planeParams = {
   width: 4,
@@ -95,7 +115,7 @@ let plane = new THREE.Mesh(
   new THREE.PlaneGeometry(planeParams.width, planeParams.height, 64, 64),
   material,
 );
-scene.add(plane);
+// scene.add(plane);
 
 const rebuildPlane = () => {
   plane.geometry.dispose();
